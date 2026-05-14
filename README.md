@@ -1,8 +1,19 @@
 # network-validation-pipeline
 
-Pipeline shell-native para troubleshooting de networking post-change en Jenkins + EKS.
+Shell/Bash-first pipeline para troubleshooting de networking en Jenkins + EKS.
 
-## Arquitectura
+## Arquitectura operacional
+
+```text
+Jenkins EC2
+  -> kubectl exec
+    -> kube-system/net-utils
+      -> target
+```
+
+Jenkins solo orquesta, recolecta reportes y publica evidencia. Todos los checks de red reales se ejecutan dentro del pod `kube-system/net-utils`.
+
+## Estructura
 
 ```text
 network-validation-pipeline/
@@ -11,82 +22,70 @@ network-validation-pipeline/
 ├── agents.md
 ├── codex.profile
 ├── .gitignore
-├── config/
-│   └── targets.yaml
+├── config/targets.yaml
 ├── scripts/
-│   ├── main.sh
-│   ├── common.sh
-│   ├── kubectl_exec.sh
-│   ├── dns_check.sh
-│   ├── tcp_check.sh
-│   ├── http_check.sh
-│   ├── tls_check.sh
-│   ├── ping_check.sh
-│   ├── traceroute_check.sh
-│   ├── report_generator.sh
-│   └── validate_dependencies.sh
 ├── reports/
 ├── logs/
-├── templates/
-│   └── report_template.html
-└── future/
-    └── python/
+├── templates/report_template.html
+└── future/python/
 ```
+
+## Dependencias por capa
+
+### Jenkins EC2
+- bash
+- awscli
+- kubectl
+- jq
+
+### Pod `kube-system/net-utils`
+- curl
+- nc
+- dig
+- openssl
+- ping
+- traceroute
 
 ## Flujo operativo
 
-1. Jenkins en EC2 hace checkout.
-2. Valida dependencias shell locales.
-3. Configura kubeconfig con `aws eks update-kubeconfig`.
-4. Verifica `kube-system/net-utils`.
-5. Ejecuta checks desde el pod con `kubectl exec`.
-6. Genera `reports/report.txt`, `reports/report.json`, `reports/report.html`.
-7. Publica artefactos y reporte HTML en Jenkins.
-
-## Ejecución de checks desde pod
-
-Todos los checks se ejecutan exclusivamente desde `kube-system/net-utils`:
-
-```bash
-kubectl exec -n kube-system net-utils -- sh -c "<comando>"
-```
-
-## Dependencias Linux
-
-- awscli
-- kubectl
-- bash
-- awk
-- sed
-- utilidades dentro del pod `net-utils`: `curl`, `nc`, `dig`, `openssl`, `ping`, `traceroute`
-- `jq` opcional para JSON enriquecido
+1. Checkout.
+2. Validación de dependencias Jenkins y `net-utils`.
+3. `aws eks update-kubeconfig`.
+4. Validación de acceso EKS.
+5. Ejecución de validaciones desde `net-utils`.
+6. Generación de `report.txt`, `report.json`, `report.html`.
+7. Archive/Publish en Jenkins.
 
 ## Ejecución local
 
 ```bash
-mkdir -p reports logs
-ENABLE_PING=true ENABLE_TRACEROUTE=false K8S_NAMESPACE=kube-system K8S_POD_NAME=net-utils scripts/main.sh config/targets.yaml
+chmod +x scripts/*.sh
+ENABLE_PING=true ENABLE_TRACEROUTE=false K8S_NAMESPACE=kube-system K8S_POD_NAME=net-utils ./scripts/main.sh config/targets.yaml
 ```
 
-## Targets múltiples y puertos múltiples
+## Exit codes
 
-El archivo `config/targets.yaml` soporta múltiples objetivos, puertos y secciones opcionales HTTP/TLS. El pipeline continúa aunque fallen checks individuales para acelerar troubleshooting.
+- `0`: todo OK
+- `1`: errores parciales
+- `2`: fallo crítico pipeline
+- `3`: dependencias faltantes
+- `4`: net-utils no accesible
 
-## Workflow de troubleshooting
+## Troubleshooting workflow
 
-- Ejecutar pipeline post-change.
-- Revisar `logs/network_validation.log` para evidencia detallada.
-- Compartir `reports/report.txt` con Networking y SecOps.
-- Usar `reports/report.html` para revisión ejecutiva rápida.
+- Revisar `logs/network_validation.log`.
+- Revisar `reports/report.txt` para resumen humano.
+- Revisar `reports/report.json` para integración automatizada.
+- Compartir `reports/report.html` con SecOps/Networking.
 
 ## TODOs estratégicos
 
-- Paralelismo por tipo de check y por target.
-- Retries configurables por check.
-- Exportación de métricas técnicas (latencia, errores por tipo).
-- Notificaciones Slack por estado y hallazgos críticos.
-- Integración con Prometheus Pushgateway.
-- Soporte multi-cluster con matriz en Jenkins.
+- Paralelismo por target/check.
+- Retries con backoff por tipo de check.
+- Métricas de latencia y availability.
+- Notificaciones Slack.
+- Integración Prometheus/Pushgateway.
+- Multi-cluster support con matriz Jenkins.
 
 ## Comandos git iniciales
 

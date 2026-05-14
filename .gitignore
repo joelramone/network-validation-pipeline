@@ -1,6 +1,5 @@
-reports/*
-!reports/.gitkeep
-logs/*
-!logs/.gitkeep
-*.log
-.DS_Store
+reports/report.*
+reports/report.ndjson
+logs/*.log
+*.swp
+*.tmp
