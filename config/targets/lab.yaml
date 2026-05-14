@@ -1,6 +1,12 @@
 targets:
-  - name: internal_api_lab
-    host: internal-api.lab.company.local
+
+  - name: ebs_aws
+    enabled: true
+    severity: critical
+    owner: cloud
+    environment: lab
+    host: ebs.us-east-1.amazonaws.com
+    path: /
     port: 443
     protocol: https
     timeout: 10
@@ -8,20 +14,206 @@ targets:
     tags:
       - critical
       - firewall
+      - aws
+      - ebs
     checks:
       - dns
       - tcp
       - http
       - tls
 
-  - name: redis_lab
-    host: redis.lab.company.local
-    port: 6379
+  - name: s3_aws
+    enabled: true
+    severity: high
+    owner: cloud
+    environment: lab
+    host: s3.us-east-1.amazonaws.com
+    path: /
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - aws
+      - s3
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: ec2_aws
+    enabled: true
+    severity: high
+    owner: cloud
+    environment: lab
+    host: ec2.us-east-1.amazonaws.com
+    path: /
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - aws
+      - ec2
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: jetstack_charts
+    enabled: true
+    severity: medium
+    owner: devops
+    environment: lab
+    host: charts.jetstack.io
+    path: /
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - charts
+      - helm
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: ecr_496845894132
+    enabled: true
+    severity: critical
+    owner: devops
+    environment: lab
+    host: 496845894132.dkr.ecr.us-east-1.amazonaws.com
+    path: /v2/nrtc/au-dataloader/manifests/
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - registry
+      - ecr
+      - aws
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: ecr_602401143452
+    enabled: true
+    severity: high
+    owner: devops
+    environment: lab
+    host: 602401143452.dkr.ecr.us-east-1.amazonaws.com
+    path: /
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - registry
+      - ecr
+      - aws
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: quay_registry
+    enabled: true
+    severity: medium
+    owner: devops
+    environment: lab
+    host: quay.io
+    path: /v2/jetstack/cert-manager-cainjector/manifests/v1.5.3
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - registry
+      - quay
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: okta_oidc
+    enabled: true
+    severity: critical
+    owner: secops
+    environment: lab
+    host: tecval.okta.com
+    path: /oauth2/ausxz2agioCoo0Ezz697/.well-known/openid-configuration
+    port: 443
+    protocol: https
+    timeout: 5
+    retries: 2
+    tags:
+      - okta
+      - auth
+      - oidc
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: fix_1
+    enabled: true
+    severity: critical
+    owner: trading
+    environment: lab
+    host: 192.168.130.186
+    port: 11504
     protocol: tcp
     timeout: 5
     retries: 2
     tags:
-      - cache
+      - fix
+      - trading
     checks:
-      - dns
       - tcp
+      - ping
+
+  - name: rds_server
+    enabled: true
+    severity: critical
+    owner: trading
+    environment: lab
+    host: 192.168.130.21
+    port: 8999
+    protocol: tcp
+    timeout: 5
+    retries: 2
+    tags:
+      - rds
+      - trading
+    checks:
+      - tcp
+      - ping
+
+  - name: rds_url
+    enabled: true
+    severity: high
+    owner: trading
+    environment: lab
+    host: 192.168.130.21
+    path: /rds/
+    port: 8999
+    protocol: http
+    timeout: 5
+    retries: 2
+    tags:
+      - rds
+      - http
+    checks:
+      - tcp
+      - http
+      - ping
