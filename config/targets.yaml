@@ -1,0 +1,26 @@
+metadata:
+  environment: staging
+  owner: network-operations
+  change_ticket: CHG-000000
+
+defaults:
+  dns_server: ""
+  timeout_seconds: 5
+  retries: 1
+
+targets:
+  - name: "internal-dns"
+    host: "kubernetes.default.svc.cluster.local"
+    protocol: "dns"
+    port: 53
+
+  - name: "internal-api"
+    host: "kubernetes.default.svc"
+    protocol: "https"
+    port: 443
+    path: "/healthz"
+
+  - name: "external-service"
+    host: "example.com"
+    protocol: "tcp"
+    port: 443
