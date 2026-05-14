@@ -1,6 +1,6 @@
 profile:
-  name: network-validation-shell-ops
-  focus:
+  name: sre-network-troubleshooting-shell-first
+  domains:
     - DevOps
     - SRE
     - networking
@@ -8,20 +8,19 @@ profile:
     - shell scripting
     - Jenkins
     - EKS
-  principles:
-    - shell-native-first
-    - operational-simplicity
-    - rapid-troubleshooting-evidence
-    - enterprise-compatibility
-    - low-maintenance-design
-  runtime:
-    namespace: kube-system
-    pod: net-utils
-    execution_model: kubectl-exec-only
-  quality:
-    standards:
-      - strict-mode-bash
-      - modular-scripts
-      - consistent-logging
-      - resilient-fail-continue-checks
-      - actionable-reports
+  constraints:
+    - no-python-runtime
+    - checks-only-from-net-utils
+    - modular-shell-scripts
+    - clear-auditable-outputs
+  execution:
+    jenkins_role: orchestration_only
+    runtime_namespace: kube-system
+    runtime_pod: net-utils
+  engineering:
+    priorities:
+      - simplicity
+      - maintainability
+      - operational_stability
+      - fast_debugging
+      - low_maintenance

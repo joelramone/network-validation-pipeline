@@ -1,28 +1,38 @@
 # Project Agent Rules
 
-## Objective
-Shell/Bash-first network troubleshooting pipeline for Jenkins + EKS with fast evidence collection for Networking and SecOps.
+## Mission
+Entregar troubleshooting de networking rápido, reproducible y auditable para Jenkins + EKS con arquitectura shell-native.
 
-## Architecture Rules
-- Run every network check from `kube-system/net-utils` via `kubectl exec`.
-- Keep checks modular in `scripts/` with one responsibility per file.
-- Persist outputs in `reports/` and `logs/`.
-- Maintain `future/python/` reserved for future analytics without affecting current shell-native runtime.
+## Mandatory Architecture
+- Jenkins actúa solo como orchestration layer y artifact/report collector.
+- Todas las pruebas de red deben ejecutarse mediante `kubectl exec` desde `kube-system/net-utils`.
+- No ejecutar `curl`, `nc`, `dig`, `openssl`, `ping` ni `traceroute` directamente en Jenkins EC2.
 
-## Coding Conventions
-- Every shell script must start with `#!/usr/bin/env bash` and `set -euo pipefail`.
-- Use shared logging and result recording from `scripts/common.sh`.
-- Keep functions composable and reusable.
-- Continue execution even when individual checks fail.
-- No pseudocode; only runnable scripts.
+## Directory Conventions
+- `scripts/main.sh`: orquestador de ejecución.
+- `scripts/common.sh`: logging, timestamps, errores y helpers.
+- `scripts/*_check.sh`: checks desacoplados por protocolo.
+- `scripts/validate_dependencies.sh`: validación Jenkins + net-utils antes de checks.
+- `reports/`: `report.txt`, `report.json`, `report.html`.
+- `logs/`: evidencia detallada de ejecución.
+- `future/python/`: reservado para evolución futura sin afectar runtime shell actual.
 
-## Operational Restrictions
-- Do not run network checks from Jenkins host itself.
-- Avoid unnecessary dependencies and avoid Python runtime requirements.
-- Prioritize clear logs and deterministic output for incident troubleshooting windows.
+## Coding Rules
+- Todo script inicia con `#!/usr/bin/env bash` y `set -euo pipefail`.
+- Mantener funciones pequeñas, reutilizables y composables.
+- Registrar resultados en formato estructurado y texto legible.
+- Continuar ejecución ante fallas de targets individuales.
+- Usar exit codes del proyecto: 0,1,2,3,4.
+- Prohibido pseudocódigo.
+
+## Operational Rules
+- Priorizar simplicidad y debugging en ventanas críticas.
+- Evitar lógica compleja embebida en Jenkinsfile.
+- Evitar dependencias innecesarias.
+- Mantener outputs claros para Networking y SecOps.
 
 ## Best Practices
-- Validate dependencies early.
-- Use deterministic report artifacts (`report.txt`, `report.json`, `report.html`).
-- Keep Jenkins stages explicit and auditable.
-- Prefer simple tooling (`kubectl`, `curl`, `nc`, `dig`, `openssl`, optional `jq`).
+- Validar accesos/dependencias al inicio.
+- Mantener stages explícitos y auditables.
+- Diseñar scripts ejecutables localmente fuera de Jenkins.
+- Evitar sobreingeniería y duplicación de lógica.
