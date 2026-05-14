@@ -1,119 +1,100 @@
 # network-validation-pipeline
 
-Bootstrap profesional para validación de networking post-change usando Jenkins + EKS + `kubectl exec` contra el pod `kube-system/net-utils`.
+Pipeline shell-native para troubleshooting de networking post-change en Jenkins + EKS.
 
 ## Arquitectura
-
-- **Jenkins (EC2):** orquesta pipeline, prepara entorno Python y publica artefactos.
-- **AWS EKS:** contexto Kubernetes configurado con `aws eks update-kubeconfig`.
-- **Pod ejecutor:** `kube-system/net-utils` para ejecutar pruebas de red dentro del clúster.
-- **Motor Python modular:** carga targets, ejecuta checks base y genera reportes JSON/HTML.
-
-## Flujo operativo
-
-1. Checkout del repositorio.
-2. Preparación de entorno Python e instalación de dependencias.
-3. Configuración de kubeconfig para EKS.
-4. Verificación de disponibilidad del pod `net-utils`.
-5. Ejecución del runner `scripts/validate_network.py`.
-6. Generación de reportes:
-   - `reports/validation_report.json`
-   - `reports/validation_report.html`
-7. Publicación de artifacts en Jenkins.
-
-## `kubectl exec` en este proyecto
-
-Jenkins no ejecuta pruebas de networking directamente en EC2. La estrategia es invocar comandos dentro del pod `net-utils` usando:
-
-```bash
-kubectl exec -n kube-system net-utils -- sh -c "<comando>"
-```
-
-Esto permite troubleshooting desde el plano de red del clúster y reduce falsos positivos desde el host Jenkins.
-
-## Estructura
 
 ```text
 network-validation-pipeline/
 ├── Jenkinsfile
 ├── README.md
-├── requirements.txt
+├── agents.md
+├── codex.profile
 ├── .gitignore
-├── agent.md
-├── codex.profile.yaml
 ├── config/
 │   └── targets.yaml
+├── scripts/
+│   ├── main.sh
+│   ├── common.sh
+│   ├── kubectl_exec.sh
+│   ├── dns_check.sh
+│   ├── tcp_check.sh
+│   ├── http_check.sh
+│   ├── tls_check.sh
+│   ├── ping_check.sh
+│   ├── traceroute_check.sh
+│   ├── report_generator.sh
+│   └── validate_dependencies.sh
 ├── reports/
 ├── logs/
 ├── templates/
 │   └── report_template.html
-└── scripts/
-    ├── __init__.py
-    ├── checks.py
-    ├── config_loader.py
-    ├── kubectl_runner.py
-    ├── logger_config.py
-    ├── models.py
-    ├── reporting.py
-    └── validate_network.py
+└── future/
+    └── python/
 ```
 
-## Dependencias
+## Flujo operativo
 
-- Python 3.11+
-- AWS CLI v2
+1. Jenkins en EC2 hace checkout.
+2. Valida dependencias shell locales.
+3. Configura kubeconfig con `aws eks update-kubeconfig`.
+4. Verifica `kube-system/net-utils`.
+5. Ejecuta checks desde el pod con `kubectl exec`.
+6. Genera `reports/report.txt`, `reports/report.json`, `reports/report.html`.
+7. Publica artefactos y reporte HTML en Jenkins.
+
+## Ejecución de checks desde pod
+
+Todos los checks se ejecutan exclusivamente desde `kube-system/net-utils`:
+
+```bash
+kubectl exec -n kube-system net-utils -- sh -c "<comando>"
+```
+
+## Dependencias Linux
+
+- awscli
 - kubectl
-- Acceso IAM para `eks:DescribeCluster` y autenticación al clúster
+- bash
+- awk
+- sed
+- utilidades dentro del pod `net-utils`: `curl`, `nc`, `dig`, `openssl`, `ping`, `traceroute`
+- `jq` opcional para JSON enriquecido
 
-Instalación local:
+## Ejecución local
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+mkdir -p reports logs
+ENABLE_PING=true ENABLE_TRACEROUTE=false K8S_NAMESPACE=kube-system K8S_POD_NAME=net-utils scripts/main.sh config/targets.yaml
 ```
 
-## Ejecución local (bootstrap)
+## Targets múltiples y puertos múltiples
+
+El archivo `config/targets.yaml` soporta múltiples objetivos, puertos y secciones opcionales HTTP/TLS. El pipeline continúa aunque fallen checks individuales para acelerar troubleshooting.
+
+## Workflow de troubleshooting
+
+- Ejecutar pipeline post-change.
+- Revisar `logs/network_validation.log` para evidencia detallada.
+- Compartir `reports/report.txt` con Networking y SecOps.
+- Usar `reports/report.html` para revisión ejecutiva rápida.
+
+## TODOs estratégicos
+
+- Paralelismo por tipo de check y por target.
+- Retries configurables por check.
+- Exportación de métricas técnicas (latencia, errores por tipo).
+- Notificaciones Slack por estado y hallazgos críticos.
+- Integración con Prometheus Pushgateway.
+- Soporte multi-cluster con matriz en Jenkins.
+
+## Comandos git iniciales
 
 ```bash
-python scripts/validate_network.py \
-  --targets config/targets.yaml \
-  --namespace kube-system \
-  --pod net-utils \
-  --enable-ping true \
-  --enable-traceroute false \
-  --output-json reports/validation_report.json \
-  --output-html reports/validation_report.html
-```
-
-## Objetivo operativo
-
-Este bootstrap establece una base enterprise-ready, modular y configuration-driven para evolucionar por fases:
-
-- DNS checks
-- TCP checks
-- HTTP/HTTPS checks
-- TLS validation
-- ping
-- traceroute
-- reportes JSON/HTML
-- artifacts para Jenkins
-
-## Comandos Git iniciales
-
-```bash
-# crear repositorio local
-cd network-validation-pipeline
 git init
-
-# branch principal
 git checkout -b main
-
-# primer commit
 git add .
-git commit -m "chore: bootstrap network validation pipeline structure"
-
-# conectar remoto y publicar (opcional)
+git commit -m "chore: bootstrap shell-first network validation pipeline"
 git remote add origin <REPO_URL>
 git push -u origin main
 ```
