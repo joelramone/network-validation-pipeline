@@ -12,11 +12,48 @@ source "${SCRIPT_DIR}/traceroute_check.sh"
 source "${SCRIPT_DIR}/validate_dependencies.sh"
 source "${SCRIPT_DIR}/report_generator.sh"
 
-TARGET_FILE="${1:-config/targets.yaml}"
 ENABLE_PING="${ENABLE_PING:-true}"
 ENABLE_TRACEROUTE="${ENABLE_TRACEROUTE:-false}"
+ENVIRONMENT=""
+
+usage() {
+  cat <<USAGE
+Usage: scripts/main.sh --environment <lab|test|dev|qa|prod>
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --environment)
+      ENVIRONMENT="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "${EXIT_CRITICAL}" "Unknown argument: $1"
+      ;;
+  esac
+done
+
+[[ -n "${ENVIRONMENT}" ]] || fail "${EXIT_CRITICAL}" "--environment is required"
+
+ENV_FILE="${REPO_ROOT}/config/environments/${ENVIRONMENT}.env"
+TARGET_FILE="${REPO_ROOT}/config/targets/${ENVIRONMENT}.yaml"
+
+[[ -f "${ENV_FILE}" ]] || fail "${EXIT_CRITICAL}" "Environment file not found: ${ENV_FILE}"
+[[ -f "${TARGET_FILE}" ]] || fail "${EXIT_CRITICAL}" "Targets file not found: ${TARGET_FILE}"
+
+set -a
+source "${ENV_FILE}"
+set +a
+
 K8S_NAMESPACE="${K8S_NAMESPACE:-kube-system}"
-K8S_POD_NAME="${K8S_POD_NAME:-net-utils}"
+K8S_POD_NAME="${NETUTILS_POD:-net-utils}"
+
+init_report_paths "${ENVIRONMENT}"
 
 run_and_track() {
   local label="$1"
@@ -29,52 +66,59 @@ run_and_track() {
   fi
 }
 
-parse_targets() {
-  awk '
-    /^  - name:/ {if (name!="") {print name"|"host"|"ports"|"http_enabled"|"http_url"|"http_method"|"tls_enabled"|"tls_sni};
-                  name=$3;host="";ports="";http_enabled="false";http_url="";http_method="GET";tls_enabled="false";tls_sni="";ctx="";next}
-    /^    host:/ {host=$2;next}
-    /^    ports:/ {gsub(/\[|\]|,/,"",$0);sub(/^    ports: /,"",$0);gsub(/ +/,",",$0);ports=$0;next}
-    /^    http:/ {ctx="http";next}
-    /^    tls:/ {ctx="tls";next}
-    /^      enabled:/ && ctx=="http" {http_enabled=$2;next}
-    /^      url:/ && ctx=="http" {sub(/^      url: /,"");gsub(/"/,"");http_url=$0;next}
-    /^      method:/ && ctx=="http" {http_method=$2;next}
-    /^      enabled:/ && ctx=="tls" {tls_enabled=$2;next}
-    /^      server_name:/ && ctx=="tls" {sub(/^      server_name: /,"");gsub(/"/,"");tls_sni=$0;next}
-    END {if (name!="") print name"|"host"|"ports"|"http_enabled"|"http_url"|"http_method"|"tls_enabled"|"tls_sni}
-  ' "${REPO_ROOT}/${TARGET_FILE}"
+should_run_check() {
+  local list="$1"
+  local check="$2"
+  [[ ",${list}," == *",${check},"* ]]
 }
 
-: > "${REPORT_DIR}/report.ndjson"
+: > "${REPORT_NDJSON}"
 PARTIAL_FAILURE=0
+
 validate_jenkins_dependencies
+validate_eks_access
 validate_netutils_access
 validate_netutils_tools
 
-while IFS='|' read -r name host ports http_enabled url method tls_enabled sni; do
-  [[ -z "${host}" ]] && continue
-  run_and_track "dns ${host}" run_dns_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}"
-  IFS=',' read -r -a port_arr <<< "${ports}"
-  for port in "${port_arr[@]}"; do
-    [[ -z "${port}" ]] && continue
-    run_and_track "tcp ${host}:${port}" run_tcp_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${port}"
-    if [[ "${tls_enabled}" == "true" ]]; then
-      run_and_track "tls ${host}:${port}" run_tls_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${port}" "${sni}"
-    fi
-  done
-  if [[ "${http_enabled}" == "true" && -n "${url}" ]]; then
-    run_and_track "http ${name}" run_http_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${name}" "${method}" "${url}"
-  fi
-  if is_truthy "${ENABLE_PING}"; then
-    run_and_track "ping ${host}" run_ping_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}"
-  fi
-  if is_truthy "${ENABLE_TRACEROUTE}"; then
-    run_and_track "traceroute ${host}" run_traceroute_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}"
-  fi
-done < <(parse_targets)
+total_targets="$(yq '.targets | length' "${TARGET_FILE}")"
+for ((i=0; i<total_targets; i++)); do
+  name="$(yq -r ".targets[${i}].name" "${TARGET_FILE}")"
+  host="$(yq -r ".targets[${i}].host" "${TARGET_FILE}")"
+  port="$(yq -r ".targets[${i}].port" "${TARGET_FILE}")"
+  retries="$(yq -r ".targets[${i}].retries // 1" "${TARGET_FILE}")"
+  checks="$(yq -r ".targets[${i}].checks // [] | join(\",\")" "${TARGET_FILE}")"
+  protocol="$(yq -r ".targets[${i}].protocol // \"tcp\"" "${TARGET_FILE}")"
 
-generate_reports
+  [[ -n "${host}" && "${host}" != "null" ]] || continue
+
+  if should_run_check "${checks}" dns; then
+    run_and_track "dns ${host}" run_dns_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+  fi
+
+  if should_run_check "${checks}" tcp; then
+    for ((attempt=1; attempt<=retries; attempt++)); do
+      run_and_track "tcp ${host}:${port} (attempt ${attempt}/${retries})" run_tcp_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${port}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+    done
+  fi
+
+  if should_run_check "${checks}" tls; then
+    run_and_track "tls ${host}:${port}" run_tls_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${port}" "${host}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+  fi
+
+  if should_run_check "${checks}" http && [[ "${protocol}" == "https" || "${protocol}" == "http" ]]; then
+    run_and_track "http ${name}" run_http_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${name}" "GET" "${protocol}://${host}:${port}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+  fi
+
+  if is_truthy "${ENABLE_PING}"; then
+    run_and_track "ping ${host}" run_ping_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+  fi
+
+  if is_truthy "${ENABLE_TRACEROUTE}"; then
+    run_and_track "traceroute ${host}" run_traceroute_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${host}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+  fi
+done
+
+generate_reports "${ENVIRONMENT}"
 
 if (( PARTIAL_FAILURE == 1 )); then
   exit "${EXIT_PARTIAL}"

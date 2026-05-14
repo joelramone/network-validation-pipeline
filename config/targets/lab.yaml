@@ -1,0 +1,27 @@
+targets:
+  - name: internal_api_lab
+    host: internal-api.lab.company.local
+    port: 443
+    protocol: https
+    timeout: 10
+    retries: 2
+    tags:
+      - critical
+      - firewall
+    checks:
+      - dns
+      - tcp
+      - http
+      - tls
+
+  - name: redis_lab
+    host: redis.lab.company.local
+    port: 6379
+    protocol: tcp
+    timeout: 5
+    retries: 2
+    tags:
+      - cache
+    checks:
+      - dns
+      - tcp
