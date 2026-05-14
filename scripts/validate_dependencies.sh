@@ -10,7 +10,7 @@ K8S_POD_NAME="${K8S_POD_NAME:-net-utils}"
 
 validate_jenkins_dependencies() {
   local missing=0
-  local deps=(bash kubectl aws jq)
+  local deps=(bash kubectl aws jq yq)
   for cmd in "${deps[@]}"; do
     if ! command -v "${cmd}" >/dev/null 2>&1; then
       log ERROR "Missing Jenkins dependency: ${cmd}"
@@ -21,8 +21,13 @@ validate_jenkins_dependencies() {
   log INFO "Jenkins dependency validation passed"
 }
 
+validate_eks_access() {
+  kubectl get nodes >/dev/null 2>&1 || return 1
+  log INFO "EKS access validated with kubectl get nodes"
+}
+
 validate_netutils_access() {
-  kubectl -n "${K8S_NAMESPACE}" get pod "${K8S_POD_NAME}" >/dev/null 2>&1 || return 1
+  kubectl -n "${K8S_NAMESPACE}" get pod "${K8S_POD_NAME}" -o jsonpath='{.status.phase}' | grep -q '^Running$' || return 1
   kubectl_exec "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "echo net-utils-ok" >/dev/null
   log INFO "Access to ${K8S_NAMESPACE}/${K8S_POD_NAME} validated"
 }
@@ -40,12 +45,9 @@ validate_netutils_tools() {
   log INFO "Tooling inside net-utils validated"
 }
 
-if ! validate_jenkins_dependencies; then
-  fail "${EXIT_DEPENDENCY_MISSING}" "Jenkins dependencies are missing"
-fi
-if ! validate_netutils_access; then
-  fail "${EXIT_NETUTILS_UNREACHABLE}" "net-utils pod is not accessible"
-fi
-if ! validate_netutils_tools; then
-  fail "${EXIT_DEPENDENCY_MISSING}" "net-utils tools are incomplete"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  validate_jenkins_dependencies || fail "${EXIT_DEPENDENCY_MISSING}" "Jenkins dependencies are missing"
+  validate_eks_access || fail "${EXIT_NETUTILS_UNREACHABLE}" "EKS access validation failed (kubectl get nodes)"
+  validate_netutils_access || fail "${EXIT_NETUTILS_UNREACHABLE}" "net-utils pod is not accessible"
+  validate_netutils_tools || fail "${EXIT_DEPENDENCY_MISSING}" "net-utils tools are incomplete"
 fi

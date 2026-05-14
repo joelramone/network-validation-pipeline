@@ -1,0 +1,12 @@
+targets:
+  - name: placeholder_prod
+    host: service.prod.company.local
+    port: 443
+    protocol: https
+    timeout: 10
+    retries: 2
+    tags:
+      - smoke
+    checks:
+      - dns
+      - tcp

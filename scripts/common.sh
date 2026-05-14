@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOG_DIR="${REPO_ROOT}/logs"
-REPORT_DIR="${REPO_ROOT}/reports"
+REPORT_BASE_DIR="${REPO_ROOT}/reports"
 LOG_FILE="${LOG_DIR}/network_validation.log"
 
 readonly EXIT_OK=0
@@ -13,9 +13,16 @@ readonly EXIT_CRITICAL=2
 readonly EXIT_DEPENDENCY_MISSING=3
 readonly EXIT_NETUTILS_UNREACHABLE=4
 
-mkdir -p "${LOG_DIR}" "${REPORT_DIR}"
+mkdir -p "${LOG_DIR}" "${REPORT_BASE_DIR}"
 
 timestamp() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
+
+init_report_paths() {
+  local environment="$1"
+  REPORT_DIR="${REPORT_BASE_DIR}/${environment}"
+  REPORT_NDJSON="${REPORT_DIR}/report.ndjson"
+  mkdir -p "${REPORT_DIR}"
+}
 
 log() {
   local level="$1"
@@ -44,7 +51,7 @@ record_result() {
   local check="$1" target="$2" status="$3" details="$4"
   printf '{"timestamp":"%s","check":"%s","target":"%s","status":"%s","details":"%s"}\n' \
     "$(timestamp)" "$(json_escape "${check}")" "$(json_escape "${target}")" "$(json_escape "${status}")" "$(json_escape "${details}")" \
-    >> "${REPORT_DIR}/report.ndjson"
+    >> "${REPORT_NDJSON}"
 }
 
 is_truthy() {
