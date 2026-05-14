@@ -23,12 +23,51 @@ pipeline {
       steps { checkout scm }
     }
 
-    stage('Run network validation') {
+    stage('Load environment') {
       steps {
         sh '''#!/usr/bin/env bash
           set -euo pipefail
           source "config/environments/${ENVIRONMENT}.env"
           aws eks update-kubeconfig --region "${AWS_REGION}" --name "${EKS_CLUSTER}"
+        '''
+      }
+    }
+
+    stage('Create net-utils pod') {
+      steps {
+        sh '''#!/usr/bin/env bash
+          set -euo pipefail
+          source "config/environments/${ENVIRONMENT}.env"
+          scripts/create_netutils_pod.sh
+        '''
+      }
+    }
+
+    stage('Wait for net-utils') {
+      steps {
+        sh '''#!/usr/bin/env bash
+          set -euo pipefail
+          source "config/environments/${ENVIRONMENT}.env"
+          scripts/wait_for_netutils.sh
+        '''
+      }
+    }
+
+    stage('Validate net-utils tools') {
+      steps {
+        sh '''#!/usr/bin/env bash
+          set -euo pipefail
+          source "config/environments/${ENVIRONMENT}.env"
+          scripts/validate_netutils_tools.sh
+        '''
+      }
+    }
+
+    stage('Execute validations') {
+      steps {
+        sh '''#!/usr/bin/env bash
+          set -euo pipefail
+          source "config/environments/${ENVIRONMENT}.env"
           ENABLE_PING="${ENABLE_PING}" ENABLE_TRACEROUTE="${ENABLE_TRACEROUTE}" scripts/main.sh --environment "${ENVIRONMENT}"
         '''
       }
@@ -37,6 +76,11 @@ pipeline {
 
   post {
     always {
+      sh '''#!/usr/bin/env bash
+        set -euo pipefail
+        source "config/environments/${ENVIRONMENT}.env"
+        scripts/cleanup_netutils.sh
+      '''
       archiveArtifacts artifacts: 'reports/**/*,logs/*', fingerprint: true, allowEmptyArchive: true
       publishHTML(target: [
         allowMissing: true,

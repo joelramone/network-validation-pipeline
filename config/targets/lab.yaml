@@ -9,6 +9,10 @@ targets:
     path: /
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 10
     retries: 2
     tags:
@@ -31,6 +35,10 @@ targets:
     path: /
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -51,6 +59,10 @@ targets:
     path: /
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -71,6 +83,10 @@ targets:
     path: /
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -91,6 +107,10 @@ targets:
     path: /v2/nrtc/au-dataloader/manifests/
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -112,6 +132,10 @@ targets:
     path: /
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -133,6 +157,10 @@ targets:
     path: /v2/jetstack/cert-manager-cainjector/manifests/v1.5.3
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
@@ -153,6 +181,10 @@ targets:
     path: /oauth2/ausxz2agioCoo0Ezz697/.well-known/openid-configuration
     port: 443
     protocol: https
+    curl:
+      insecure: true
+      verbose: true
+      follow_redirects: true
     timeout: 5
     retries: 2
     tags:
