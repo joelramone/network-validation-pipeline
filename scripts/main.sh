@@ -78,7 +78,6 @@ PARTIAL_FAILURE=0
 validate_jenkins_dependencies
 validate_eks_access
 validate_netutils_access
-validate_netutils_tools
 
 total_targets="$(yq '.targets | length' "${TARGET_FILE}")"
 for ((i=0; i<total_targets; i++)); do
@@ -106,7 +105,16 @@ for ((i=0; i<total_targets; i++)); do
   fi
 
   if should_run_check "${checks}" http && [[ "${protocol}" == "https" || "${protocol}" == "http" ]]; then
-    run_and_track "http ${name}" run_http_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${name}" "GET" "${protocol}://${host}:${port}" "${ENVIRONMENT}" "${EKS_CLUSTER}"
+    path="$(yq -r ".targets[${i}].path // \"\"" "${TARGET_FILE}")"
+    insecure="$(yq -r ".targets[${i}].curl.insecure // true" "${TARGET_FILE}")"
+    verbose="$(yq -r ".targets[${i}].curl.verbose // true" "${TARGET_FILE}")"
+    follow_redirects="$(yq -r ".targets[${i}].curl.follow_redirects // true" "${TARGET_FILE}")"
+    port_segment=":${port}"
+    if [[ "${port}" == "80" && "${protocol}" == "http" ]] || [[ "${port}" == "443" && "${protocol}" == "https" ]]; then
+      port_segment=""
+    fi
+    url="${protocol}://${host}${port_segment}${path}"
+    run_and_track "http ${name}" run_http_check "${K8S_NAMESPACE}" "${K8S_POD_NAME}" "${name}" "GET" "${url}" "${insecure}" "${verbose}" "${follow_redirects}"
   fi
 
   if is_truthy "${ENABLE_PING}"; then
